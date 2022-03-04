@@ -1,6 +1,6 @@
 # 神经网络优化
 
-对应的Jupyter Notebook文件，在 [Improving Neural Networks](https://github.com/limingluo/limingluo.github.io/blob/main/deeplearning/notebooks/Improving-Neural-Networks.ipynb)    [下载到本地](https://limingluo.github.io/deeplearning/notebooks/Improving-Neural-Networks.ipynb)
+对应的Jupyter Notebook文件，在 [Improving Neural Networks](https://github.com/limingluo/limingluo.github.io/blob/main/Deep-Learning/notebooks/Improving-Neural-Networks.ipynb)    [下载到本地](https://limingluo.github.io/deeplearning/notebooks/Improving-Neural-Networks.ipynb)
 
 ## 参数
 

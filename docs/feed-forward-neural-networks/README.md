@@ -1,6 +1,6 @@
 # 前馈神经网络 Feed-forward Neural Networks
 
-对应的Jupyter Notebook文件，在 [Feed-forward Neural Networks](https://github.com/limingluo/Deep-Learning/docs/notebooks/Feed-Forward-Neural-Networks.ipynb)    [下载到本地](https://limingluo.github.io/Deep-Learning/docs/notebooks/Feed-Forward-Neural-Networks.ipynb)
+对应的Jupyter Notebook文件，在 [Feed-forward Neural Networks](https://github.com/limingluo/Deep-Learning/blob/main/docs/notebooks/Feed-Forward-Neural-Networks.ipynb)    [下载到本地](https://limingluo.github.io/Deep-Learning/notebooks/Feed-Forward-Neural-Networks.ipynb)
 
 ## 描述
 
