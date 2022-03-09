@@ -38,11 +38,11 @@ def initialize_parameters_zeros(layers_dims):
 
 实际上，只要把权重初始化为同一个值，就会出现symmetry，在神经网络中是不行的。
 
-下图演示了如果将参数全初始化为0，损失随迭代次数的变化情况（隐藏层使用ReLu激活函数，输出层使用Sigmoid激活函数）：
+下图演示了某次训练将参数全初始化为0，损失随迭代次数的变化情况（隐藏层使用ReLu激活函数，输出层使用Sigmoid激活函数，迭代2000次）：
 
-![0initalise](images/README/0initalise.png)
+![0_init](images/README/0_init.png)
 
-可以看到，把参数初始化为0的话，损失一直不随着迭代次数的增加而变化。
+可以看到，把参数初始化为0的话，损失的变化程度非常小。
 
 2. 随机初始化
 
@@ -56,7 +56,7 @@ def initialize_parameters_random(layers_dims):
     ranges = 1 # 初始化W的倍数，表示W在(0, 0.01)间
     for l in range(1, L):
         parameters["W"+str(l)] = np.random.randn(layers_dims[l], layers_dims[l-1])*ranges 
-        parameters["b"+str(l)] = np.random.rzeros((layers_dims[l], 1))
+        parameters["b"+str(l)] = np.zeros((layers_dims[l], 1))
     return parameters
 ```
 
@@ -130,7 +130,25 @@ He初始化方法适合ReLu和Leaky-ReLu等激活函数。
 
 #### 超参数
 
-​	超参数的选择一般是基于不断试错，尝试多种不同的超参数组合，然后训练出不同的模型后比较表现，积累经验，选出最优的组合
+​	超参数的选择一般是基于不断试错，尝试多种不同的超参数组合，然后训练出不同的模型后比较表现，积累经验，选出最优的组合，但也有一些方法能优化超参数的选择。
+
+1. 学习速率衰减
+
+​	更新权重参数的公式：$W=W-\alpha*dW$
+
+​	这里的学习率是固定的，意味着每次训练迈出的步长是固定的，刚开始的时候我们需要较大的步长以快速减小损失（快速下山），在经过多次训练（epoch）之后损失接近最小值（谷底），但因为步长仍然较大，所以会在谷底的两侧反复横跳，很难到达谷底位置。
+
+​	为了解决这个问题，我们可以让学习速率（步长）动态变化，训练越往后，学习速率越小，这样在快到达谷底时迈着小步子，更有机会最终触底。
+
+​	为了实现学习速率的动态衰减，常用的方法有：
+
+- $\alpha=\frac{1}{1+decayrate*epoch}*\alpha_0$
+
+​		其中$\alpha_0$是学习速率初始化的值，decayrate是衰减率，决定了衰减得有多快，epoch是当前训练的次数，次数越大得到的学习速率就越小。
+
+ - $\alpha=0.95^{epoch}*\alpha_0$ ——指数衰减的方式
+ - $\alpha=\frac{k}{epoch}*\alpha_0$
+ - 每当训练过了一定次数后，就手动调整学习速率为更小的一个值  
 
 ## 激活函数
 
@@ -229,9 +247,45 @@ He初始化方法适合ReLu和Leaky-ReLu等激活函数。
 
 在一般的机器学习算法，比如逻辑回归、线性回归中，我们使用L1正则化、L2正则化来减缓过拟合现象，在神经网络中我们也能使用这种正则化。
 
-神经网络模型的代价函数为：
+神经网络模型的原代价函数为：
 
 $J\left(w^{[1]}, b^{[1]}, \ldots, w^{[l]}, b^{[l]}\right)=\frac{1}{m}\sum_{i=1}^m L(\hat{y}^{(i)},y^{(i)})$
+
+加入L1正则项后变为：
+
+$J\left(w^{[1]}, b^{[1]}, \ldots, w^{[l]}, b^{[l]}\right)=\frac{1}{m}\sum_{i=1}^m L(\hat{y}^{(i)},y^{(i)})+\frac{\lambda}{2m}\sum_{l=1}^L|w^{[l]}|$
+
+相对应的，计算损失函数以及反向传播函数需要进行调整：
+
+```python
+# 使用L1正则化后的计算损失
+def compute_cost_with_L1_reg(Y_hat, Y, parameters, lambd, layer_dims):
+    m = Y.shape[1]
+    L = len(layer_dims)
+    L1_regularization_cost = compute_cost(Y_hat, Y)  # compute_cost函数为原计算损失的函数
+    for l in range(1, L):
+        L1_regularization_cost = L1_regularization_cost + 1./m * lambd/2 * (np.sum(np.absolute(parameters["W"+str(l)])))
+    
+    return L1_regularization_cost
+
+# 使用L1正则化后的反向传播函数
+def backward_propagation_L1_reg(Y_hat, Y, caches, parameters, lambd):
+    m = Y_hat.shape[1] # 神经网络层数
+    L = len(parameters) // 2
+    grads = {} # 存储中间产生的梯度的字典
+    grads["dZ"+str(L)] = Y_hat - Y # 先存储关于输出层中Z的梯度
+    #print( grads["dZ"+str(L)].shape)
+    for l in range(L, 0,-1):
+ 
+        grads["dW" + str(l)] = 1/m * np.dot(grads["dZ"+str(l)], caches["A"+str(l-1)].T) + lambd / m 
+        grads["db" + str(l)] = 1/m *  np.sum(grads["dZ"+str(l)], axis=1, keepdims=True)
+
+        if l > 1:
+            grads["dA" + str(l-1)] = np.dot(parameters["W"+str(l)].T, grads["dZ"+str(l)])
+            grads["dZ"+str(l-1)] =  relu_backward(grads["dA" + str(l-1)], caches["Z"+str(l-1)] )
+    return grads
+
+```
 
 加入L2正则项后变为：
 
@@ -239,7 +293,38 @@ $J\left(w^{[1]}, b^{[1]}, \ldots, w^{[l]}, b^{[l]}\right)=\frac{1}{m}\sum_{i=1}^
 
 其中$||w^{[l]}||^2_F=\sum_{i=1}^{n^{[l-1]}}\sum_{j=1}^{n^{[l]}}(w_{ij}^{[l]})^2$
 
-在使用梯度下降更新参数的时候也需要减掉这个正则项。
+相对应的，计算损失函数以及反向传播函数需要进行调整：
+
+```python
+# 使用L2正则化后的计算损失
+def compute_cost_with_L2_reg(Y_hat, Y, parameters, lambd, layer_dims):
+    m = Y.shape[1]
+    L = len(layer_dims)
+    L2_regularization_cost = compute_cost(Y_hat, Y) 
+    for l in range(1, L):
+        L2_regularization_cost = L2_regularization_cost + 1./m * lambd/2 * (np.sum(np.square(parameters["W"+str(l)])))
+    
+    return L2_regularization_cost
+
+# 使用L2正则化后的反向传播函数
+def backward_propagation_L2_reg(Y_hat, Y, caches, parameters, lambd):
+    m = Y_hat.shape[1] # 神经网络层数
+    L = len(parameters) // 2
+    grads = {} # 存储中间产生的梯度的字典
+    grads["dZ"+str(L)] = Y_hat - Y # 先存储关于输出层中Z的梯度
+    for l in range(L, 0,-1):
+ 
+        grads["dW" + str(l)] = 1/m * np.dot(grads["dZ"+str(l)], caches["A"+str(l-1)].T) + lambd / m * parameters["W"+str(l)]
+        grads["db" + str(l)] = 1/m *  np.sum(grads["dZ"+str(l)], axis=1, keepdims=True)
+
+        if l > 1:
+            grads["dA" + str(l-1)] = np.dot(parameters["W"+str(l)].T, grads["dZ"+str(l)])
+            grads["dZ"+str(l-1)] =  relu_backward(grads["dA" + str(l-1)], caches["Z"+str(l-1)] )
+    return grads
+
+```
+
+
 
 ### Dropout正则化
 
@@ -683,10 +768,126 @@ ${\frac{\partial A^{[l]}}{\partial Z^{[l]}}}=f^\prime(Z^{[l]})$
 4. Batch Normalisation
 5. LSTM结构
 
-## Mini-batch
+## 优化方法
 
-### 什么是mini-batch？
+深度学习中，每次训练经历反向传播过程，并通过梯度下降方法更新参数，而在计算梯度时，使用到的样本数的不同就衍生出了不同的梯度下降方法。比如我们之前实现的神经网络，在反向传播时就使用了所有的训练样本计算梯度，这就是最基础的批量梯度下降方法。
 
-### 为什么用mini-batch？
+### 批量梯度下降 Batch Gradient Descent
 
-深度学习中，每次训练都要经过前向传播、反向传播、更新参数的过程，而其中每次都需要使用到训练集中所有的样本进行计算。比如在
+批量梯度下降是最基础，最直观的梯度下降方法，每次训练时使用所有的训练样本计算梯度。
+
+因为使用了所有的训练样本，所以收敛的方向更偏向损失的全局/局部最小值，需要的训练次数（epoch）会更少，损失更新也会更平滑更稳定；但是因为每次训练都需要使用所有训练样本进行机选，所以在遇到大规模数据时训练速度会很慢，而且会占用大量内存。
+
+![image-20220305142440430](images/README/image-20220305142440430.png)
+
+### 随机梯度下降 Stochastic Gradient Descent
+
+随机梯度下降是批量梯度下降的另一个极端，每次更新权重只使用一个样本计算梯度。
+
+因为只使用了一个训练样本，所以每次训练计算的速度会很快，但是收敛的方向就会偏离损失的全局/局部最小值，损失更新会非常不稳定/震荡，需要更多次的训练才能找到最优解。
+
+![image-20220305152201012](images/README/image-20220305152201012.png)
+
+### 小批量梯度下降 Mini-batch Gradient Descent
+
+批量梯度下降和随机梯度下降的折中办法，小批量梯度下降采用训练集中的一小批$k$来进行每次的权重更新，比如$k=10, 20, 30$等。
+
+这种方法拥有比批量梯度下降更高的更新频率，保证了梯度更新的准确性/鲁棒性；同时拥有比随机梯度下降更少的训练次数，保证了梯度更新的高效性。
+
+### Momentum梯度下降
+
+传统的梯度下降法存在一些不可避免的问题。梯度下降的过程就像是下山，损失最小值的点在山间的峡谷中，在要到达最小值点的时候，梯度下降的行进路线可能会变成在两个山谷间反复横跳。我们要是增大学习速率（步长），那每次移动的距离会更大，更会在山谷里来回；我们要是减小学习速率（步长），那么一点点向下移动确实更有机会达到谷底，但是同时也需要更多时间。
+
+Momentum梯度下降就能一定程度上解决这个问题，整个过程就像是用一个球滚下山一样，在滚动的过程中不断获得动量（Momentum），既能滚到谷底也保证了行进的速度。
+
+传统的梯度下降是这样更新参数的：
+
+$W=W-\alpha *dW$
+
+$b=b-\alpha*db$
+
+加入了Momentum后是这样更新参数的：
+
+​	$v_{dW}=\beta* v_{dW}+(1-\beta)dW$
+
+​	$v_{db}=\beta* v_{db}+(1-\beta)db$
+
+​	$W=W-\alpha*v_{dW}$
+
+​	$b= b-\alpha*v_{db}$
+
+可以看到现在是通过$v$来更新参数，$\beta$是一个超参数，范围为0-1，比如如果设置为0.9，那么
+
+$v_{dW}=0.9* v_{dW}+0.1*dW$
+
+也就是说，当前的$v$，等于上一次训练得到的$v$的0.9倍，加上当前的梯度的0.1倍；
+
+而上一次训练得到的$v$，等于上上一次训练得到的$v$的0.9倍，加上上一次训练的梯度的0.1倍；
+
+······
+
+例如训练有5次iterations，那么：
+
+$\begin{aligned} v_5&=0.9*v_4+0.1*dW_5\\&=0.9*(0.9*v_3+0.1*dW_4)+0.1*dW_5\\ &=0.81v_3+0.09*dW_4+0.1*dW_5\\&=0.81(0.9*v_2+0.1*dW_3)+0.09*dW_4+0.1*dW_5\\&=0.9^3*v_2+0.9^2*0.1*dW_3+0.9^1*0.1*dW_4+0.9^0*0.1*dW_5\\&=···\\&=0.9^4*0.1*dW_1+0.9^3*0.1*dW_2+0.9^2*0.1*dW_3+0.9^1*0.1*dW_4+0.9^0*0.1*dW_5\end{aligned}$
+
+可以看出，当前时刻的$v$等于以前每次训练得到的梯度的加权平均（指数形式），离当前时刻越近求得的梯度，占的权重就越大。也就是说，在小球滚下山的过程中，它每个时刻的心中有一个方向（梯度），但每滚动之前都会参考以往时刻滚动的方向，且越接近于现在的时刻，参考的比重就越大，这就是小球的动量来源。
+
+一个帮助理解的例子是人走下山要一路问路，我们参考以往所有指路的人的意见，但肯定更青睐于相信刚刚这几次指路的信息。
+
+小球靠着前面的运动不断积攒的速度与方向，一路滚下来，在震荡的方向上梯度互相抵消，在梯度小的方向上梯度逐渐累积，即减少了垂直方向上的移动，同时还加速了水平方向上的移动，减轻了偏离下山路线的情况发生，移动过程更加丝滑。
+
+通过Momentum方法可以看到，我们的目的是尽量减小梯度下降在震荡大（梯度大）的方向上的移动，而增加在震荡小（梯度小）的方向上的移动，表现在两个参数的梯度下降时就是减小垂直方向上的梯度更新，增大水平方向上的梯度更新。Momentum通过加权累加之前的梯度，修改梯度本身的值做到了”震荡抵消“与”水平加速“，在梯度更新公式中还有个重要因素是学习速率，相似的原理，我们也可以通过改变不同方向上的学习速率（步长）来达到控制移动的目的，这就是Adagrad方法。
+
+### Adagrad
+
+Adagrad是这样更新参数的：
+
+​	$r_{dW}=r_{dW}+dW^2$
+
+​	$r_{db}=r_{db}+db^2$
+
+​	$W=W-\frac{\alpha}{\sqrt{r_{dW}+\sigma}}*dW$($\sigma$是调节用的超参数)
+
+​	$b=b-\frac{\alpha}{\sqrt{r_{db}+\sigma}}*db$
+
+Adagrad没有改变更新时的梯度本身，而是对学习速率（步长）做了改动。
+
+$r$的值和梯度的平方成正相关，在某方向上的梯度越大，对应的$r$就越大，所以步长$\frac{\alpha}{\sqrt{r_{dW}+\sigma}}$就会越小，在这个方向上的移动速度就会越小，反之在梯度越小的方向上移动速度就会越大。体现在两个参数的梯度下降上就是垂直方向上缓缓移动，水平方向上更快移动，做到了和Momentum类似的效果。
+
+但是Adagrad也有明显的缺点，因为$r$的值是和上一时刻的$r$值正相关的，随着训练次数的增多，$r$的值会慢慢累积变大，那么即使是在梯度较小的方向上，因为$r$的递增最终步长也会变得越来越小，跑得越来越慢甚至停止前进。
+
+### RMSProp
+
+RMSProp是Momentum和Adagrad两者思想相结合的产物，上面提到，Adagrad的$r$值和上一时刻的$r$有关，会一直增长，导致后面的训练中步长过小而失去作用，那么能不能让$r$的值在后面的训练中变得不那么大呢？
+
+在Momentum中，我们使用了指数加权平均来累积梯度的值，所以后面的$v$值更注重参考离当前时刻近的值，而几乎忘记了前面的值。	$v_{dW}=\beta* v_{dW}+(1-\beta)dW$
+
+同样的道理，我们也在Adagrad的基础上使用指数加权平均：
+
+​	$r_{dW}=\beta*r_{dW}+(1-\beta)*dW^2$
+
+​	$r_{db}=\beta*r_{db}+(1-\beta)*db^2(\sigma$是调节用的超参数)
+
+​	$W=W-\frac{\alpha}{\sqrt{r_{dW}+\sigma}}*dW$
+
+​	$b=b-\frac{\alpha}{\sqrt{r_{db}+\sigma}}*db$
+
+这样的话，训练到后面的阶段，$r$值也会因为历史累积的衰减而逐渐忘记前面走过的路，在梯度较小的方向不会增长过快而导致步长变大，缓解了越走越慢的现象。
+
+### Adam
+
+Adam是Momentum和RMSProp的结合，通常会有更好的表现
+
+​	$v_{dW}=\beta_1* v_{dW}+(1-\beta_1)dW$
+
+​	$v_{db}=\beta_1* v_{db}+(1-\beta_1)db$
+
+​	$r_{dW}=\beta_2*r_{dW}+(1-\beta_2)*dW^2$
+
+​	$r_{db}=\beta_2*r_{db}+(1-\beta_2)*db^2$
+
+​	$W=W-\frac{\alpha}{\sqrt{r_{dW}+\sigma}}*v_{dW}$
+
+​	$b=b-\frac{\alpha}{\sqrt{r_{db}+\sigma}}*v_{db}$
+
+其中根据经验，$\beta_1$的取值一般为0.9，$\beta_2的取值一般为0.999，$$\sigma$的取值一般为$10^{-8}$
